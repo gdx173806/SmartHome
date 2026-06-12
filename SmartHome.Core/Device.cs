@@ -11,7 +11,6 @@ public abstract class Device : IDevice
     
     protected Device(string id, string name, string room)
     {
-        // zabezpieczenie przed niepoprawnymi danymi
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(room);

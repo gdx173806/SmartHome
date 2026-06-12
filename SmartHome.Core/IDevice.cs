@@ -7,6 +7,8 @@ public interface IDevice
     string Room { get; }
     bool IsEnabled { get; }
     
+    event EventHandler<DeviceFailureEventArgs>? OnFailure;
+    
     void TurnOn();
     void TurnOff();
     string GetStatus();
