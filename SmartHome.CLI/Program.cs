@@ -1,9 +1,8 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using SmartHome.Core;
+﻿using SmartHome.Core;
+using Spectre.Console;
 
-Console.WriteLine("=== SMART HOME CENTRAL STATION ===");
+AnsiConsole.Write(new FigletText("SMART HOME").Color(Color.Blue));
+AnsiConsole.MarkupLine("[bold yellow]Central Control Station Initialized.[/]\n");
 
 var myHome = new SmartHomeHub("My Sweet Home");
 
@@ -24,12 +23,19 @@ foreach (var device in myHome.GetDevices())
     {
         if (sender is IDevice failedDevice)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"\n[!!! ALERT !!!] [{args.TimeStamp:HH:mm:ss}]");
-            Console.WriteLine($"Device failure detected: {failedDevice.Name} in {failedDevice.Room} stopped working!");
-            Console.WriteLine($"Reason: {args.Reason}");
-            Console.ResetColor();
-            Console.Write("\nChoose option: ");
+            // Spectre pozwala na tworzenie stylowych paneli (brzegów) wokół tekstu
+            var alertPanel = new Panel(
+                $"[bold white]Device:[/] [yellow]{failedDevice.Name}[/] ({failedDevice.Id})\n" +
+                $"[bold white]Room:[/] {failedDevice.Room}\n" +
+                $"[bold white]Reason:[/] [red]{args.Reason}[/]")
+            {
+                Header = new PanelHeader("[bold red]!!! CRITICAL FAILURE !!![/]"),
+                Border = BoxBorder.Heavy,
+                BorderStyle = new Style(Color.Red)
+            };
+
+            AnsiConsole.Write(alertPanel);
+            AnsiConsole.MarkupLine("\n[grey]Press arrow keys to refresh menu layout...[/]");
         }
     };
 }
@@ -48,70 +54,99 @@ foreach (var device in myHome.GetDevices())
 // glowna petla - menu
 while (true)
 {
-    Console.WriteLine("\n-----------------------------------");
-    Console.WriteLine("1. Show all devices status");
-    Console.WriteLine("2. Turn ON all devices");
-    Console.WriteLine("3. Turn OFF all devices");
-    Console.WriteLine("4. Find device by ID (Indexer test)");
-    Console.WriteLine("5. Filter devices by Room (LINQ test)");
-    Console.WriteLine("6. Exit system");
-    Console.Write("Choose option: ");
+    var choice = AnsiConsole.Prompt(
+        new SelectionPrompt<string>()
+            .Title("[bold green]Select an action from the menu:[/]")
+            .PageSize(10)
+            .MoreChoicesText("[grey](Move up and down using arrow keys)[/]")
+            .AddChoices(new[] {
+                "Show all devices status",
+                "Turn ON all devices",
+                "Turn OFF all devices",
+                "Find device by ID (Indexer)",
+                "Filter devices by Room (LINQ)",
+                "Exit system"
+            }));
     
-    string? choice = Console.ReadLine();
+    switch (choice)
+    {
+        case "Show all devices status":
+            var table = new Table().Border(TableBorder.Rounded);
+            table.AddColumn("[bold blue]ID[/]");
+            table.AddColumn("[bold blue]Device Name[/]");
+            table.AddColumn("[bold blue]Room[/]");
+            table.AddColumn("[bold blue]Status[/]");
 
-    if (choice == "1")
-    {
-        Console.WriteLine("\n--- Current Devices Status ---");
-        foreach (var d in myHome.GetDevices())
-        {
-            Console.WriteLine($"[{d.Id}] {d.Name} in {d.Room} -> Status: {d.GetStatus()}");
-        }
+            foreach (var d in myHome.GetDevices())
+            {
+                string statusText = d.IsEnabled ? "[green]ON[/]" : "[red]OFF[/]";
+                table.AddRow(d.Id, d.Name, d.Room, statusText);
+            }
+
+            AnsiConsole.Write(table);
+            break;
+
+        case "Turn ON all devices":
+            AnsiConsole.MarkupLine("[yellow]Sending 'Turn On' signal to all nodes...[/]");
+            foreach (var d in myHome.GetDevices()) d.TurnOn();
+            AnsiConsole.MarkupLine("[green]All devices activated successfully.[/]");
+            break;
+
+        case "Turn OFF all devices":
+            AnsiConsole.MarkupLine("[yellow]Sending 'Turn Off' signal to all nodes...[/]");
+            foreach (var d in myHome.GetDevices()) d.TurnOff();
+            AnsiConsole.MarkupLine("[red]All devices deactivated.[/]");
+            break;
+
+        case "Find device by ID (Indexer)":
+            string searchId = AnsiConsole.Ask<string>("[bold green]Enter device ID to look for (e.g. LGT-01):[/]");
+            
+            // uzycie indeksatora
+            IDevice? found = myHome[searchId];
+            
+            if (found != null)
+                AnsiConsole.MarkupLine($"[green]Found:[/] [yellow]{found.Name}[/] in room: [blue]{found.Room}[/] (Status: {(found.IsEnabled ? "[green]ON[/]" : "[red]OFF[/]")})");
+            else
+                AnsiConsole.MarkupLine("[red]Error: Device with this ID does not exist![/]");
+            break;
+
+        case "Filter devices by Room (LINQ)":
+            var uniqueRooms = myHome.GetDevices()
+                .Select(d => d.Room)
+                .Distinct()       
+                .ToList();   
+            
+            string roomName = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[bold green]Select a room to filter devices:[/]")
+                    .AddChoices(uniqueRooms));
+            
+            if (uniqueRooms.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[orange1]No rooms available because there are no devices in the system![/]");
+                break;
+            }
+            // uzycie filtra LINQ
+            var roomDevices = myHome.GetDevicesInRoom(roomName);
+            
+            if (roomDevices.Count > 0)
+            {
+                AnsiConsole.MarkupLine($"\n--- Devices in [blue]{roomName}[/] ---");
+                foreach (var d in roomDevices) AnsiConsole.MarkupLine($" * [yellow]{d.Name}[/] ({d.Id})");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[orange1]No devices found in this room.[/]");
+            }
+            break;
+
+        case "Exit system":
+            AnsiConsole.MarkupLine("\n[bold red]Shutting down Smart Home core. Goodbye![/]");
+            cts.Cancel();
+            return;
     }
-    else if (choice == "2")
-    {
-        Console.WriteLine("\nTurning on all devices...");
-        foreach (var d in myHome.GetDevices()) d.TurnOn();
-    }
-    else if (choice == "3")
-    {
-        Console.WriteLine("\nTurning off all devices...");
-        foreach (var d in myHome.GetDevices()) d.TurnOff();
-    }
-    else if (choice == "4")
-    {
-        Console.Write("\nEnter device ID to look for: ");
-        string? searchId = Console.ReadLine();
-        
-        // indeksator
-        IDevice? found = myHome[searchId ?? ""];
-        
-        if (found != null)
-            Console.WriteLine($"Found: {found.Name} in room: {found.Room}");
-        else
-            Console.WriteLine("Device not found!");
-    }
-    else if (choice == "5")
-    {
-        Console.Write("\nEnter room name (Kitchen/LivingRoom/Bedroom): ");
-        string? roomName = Console.ReadLine();
-        
-        // filtr LINQ
-        var roomDevices = myHome.GetDevicesInRoom(roomName ?? "");
-        
-        Console.WriteLine($"\n--- Devices in {roomName} ---");
-        foreach (var d in roomDevices)
-        {
-            Console.WriteLine($"- {d.Name} ({d.Id})");
-        }
-    }
-    else if (choice == "6")
-    {
-        Console.WriteLine("\nShutting down system. Goodbye!");
-        cts.Cancel();
-        break;
-    }
-    else
-    {
-        Console.WriteLine("Unknown option, try again.");
-    }
+
+    AnsiConsole.MarkupLine("\n[grey]Press any key to clear screen and continue...[/]");
+    Console.ReadKey(true);
+    Console.Clear();
 }

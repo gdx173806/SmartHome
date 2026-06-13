@@ -44,7 +44,7 @@ public class SmartHomeHub
         get
         {
             // LINQ do przeszukania listy
-            return _devices.FirstOrDefault(d => d.Id == id);
+            return _devices.FirstOrDefault(d => d.Id.ToLower() == id.ToLower());
         }
     }
 
