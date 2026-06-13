@@ -5,6 +5,7 @@ AnsiConsole.Write(new FigletText("SMART HOME").Color(Color.Blue));
 AnsiConsole.MarkupLine("[bold yellow]Central Control Station Initialized.[/]\n");
 
 var myHome = new SmartHomeHub("My Sweet Home");
+List<string> systemAlerts = new List<string>();
 
 
 var kitchenLight = new SmartLight("LGT-01", "Ceiling Light", "Kitchen");
@@ -23,22 +24,17 @@ foreach (var device in myHome.GetDevices())
     {
         if (sender is IDevice failedDevice)
         {
-            // Spectre pozwala na tworzenie stylowych paneli (brzegów) wokół tekstu
-            var alertPanel = new Panel(
-                $"[bold white]Device:[/] [yellow]{failedDevice.Name}[/] ({failedDevice.Id})\n" +
-                $"[bold white]Room:[/] {failedDevice.Room}\n" +
-                $"[bold white]Reason:[/] [red]{args.Reason}[/]")
+            lock (systemAlerts)
             {
-                Header = new PanelHeader("[bold red]!!! CRITICAL FAILURE !!![/]"),
-                Border = BoxBorder.Heavy,
-                BorderStyle = new Style(Color.Red)
-            };
+                systemAlerts.Add(
+                    $"({args.TimeStamp:HH:mm:ss}) [red]CRITICAL:[/] [yellow]{failedDevice.Name}[/] ({failedDevice.Id}) in room: {failedDevice.Room} - [bold]{args.Reason}[/]");
+            }
 
-            AnsiConsole.Write(alertPanel);
-            AnsiConsole.MarkupLine("\n[grey]Press arrow keys to refresh menu layout...[/]");
+
         }
     };
 }
+
 
 // symulacja pracy wszystkich urzadzen
 var cts = new CancellationTokenSource();
@@ -54,12 +50,29 @@ foreach (var device in myHome.GetDevices())
 // glowna petla - menu
 while (true)
 {
+    lock (systemAlerts)
+    {
+        if (systemAlerts.Count > 0)
+        {
+            var alertContent = string.Join("\n", systemAlerts);
+            var alertPanel = new Panel(alertContent)
+            {
+                Header = new PanelHeader("[bold red]!!! SYSTEM ALERTS & LOGS !!![/]"),
+                Border = BoxBorder.Heavy,
+                BorderStyle = new Style(Color.Red)
+            };
+            
+            AnsiConsole.Write(alertPanel);
+            AnsiConsole.WriteLine();
+        }
+    }
     var choice = AnsiConsole.Prompt(
         new SelectionPrompt<string>()
             .Title("[bold green]Select an action from the menu:[/]")
             .PageSize(10)
             .MoreChoicesText("[grey](Move up and down using arrow keys)[/]")
             .AddChoices(new[] {
+                "Refresh Dashboard",
                 "Show all devices status",
                 "Turn ON all devices",
                 "Turn OFF all devices",
@@ -70,6 +83,9 @@ while (true)
     
     switch (choice)
     {
+        case "Refresh Dashboard":
+            continue;
+        
         case "Show all devices status":
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("[bold blue]ID[/]");
